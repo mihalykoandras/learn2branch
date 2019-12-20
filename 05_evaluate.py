@@ -8,13 +8,15 @@ import time
 import pickle
 
 import pyscipopt as scip
+import warnings
+with warnings.catch_warnings():  
+    warnings.filterwarnings("ignore",category=FutureWarning)
+    import tensorflow as tf
+    import tensorflow.contrib.eager as tfe
 
-import tensorflow as tf
-import tensorflow.contrib.eager as tfe
+    #import svmrank
 
-import svmrank
-
-import utilities
+    import utilities
 
 
 class PolicyBranching(scip.Branchrule):
@@ -137,21 +139,35 @@ if __name__ == '__main__':
         type=int,
         default=0,
     )
+    parser.add_argument(
+            '-f', '--input',
+        help='Input file name.',
+        type=str,
+        default='input.lp',
+    )
+    parser.add_argument('--output',
+            dest='output',
+            default=False)
+
+
     args = parser.parse_args()
 
     result_file = f"{args.problem}_{time.strftime('%Y%m%d-%H%M%S')}.csv"
     instances = []
-    seeds = [0, 1, 2, 3, 4]
+    seeds = [0,1]
     gcnn_models = ['baseline']
     other_models = ['extratrees_gcnn_agg', 'lambdamart_khalil', 'svmrank_khalil']
     internal_branchers = ['relpscost']
     time_limit = 3600
 
     if args.problem == 'setcover':
-        instances += [{'type': 'small', 'path': f"data/instances/setcover/transfer_500r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
-        instances += [{'type': 'medium', 'path': f"data/instances/setcover/transfer_1000r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
-        instances += [{'type': 'big', 'path': f"data/instances/setcover/transfer_2000r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
-        gcnn_models += ['mean_convolution', 'no_prenorm']
+        #instances += [{'type': 'small', 'path': f"data/instances/setcover/transfer_500r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
+        #instances += [{'type': 'medium', 'path': f"data/instances/setcover/transfer_1000r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
+        #instances += [{'type': 'big', 'path': f"data/instances/setcover/transfer_2000r_1000c_0.05d/instance_{i+1}.lp"} for i in range(20)]
+        #instances=instances[:1]
+        #/home/jacs/toy_setcover.lp
+        instances = [{'type': 'small', 'path':args.input }]
+        #gcnn_models += ['mean_convolution', 'no_prenorm']
 
     elif args.problem == 'cauctions':
         instances += [{'type': 'small', 'path': f"data/instances/cauctions/transfer_100_500/instance_{i+1}.lp"} for i in range(20)]
@@ -181,15 +197,6 @@ if __name__ == '__main__':
                     'name': brancher,
                     'seed': seed,
              })
-    # ML baselines
-    for model in other_models:
-        for seed in seeds:
-            branching_policies.append({
-                'type': 'ml-competitor',
-                'name': model,
-                'seed': seed,
-                'model': f'trained_models/{args.problem}/{model}/{seed}',
-            })
     # GCNN models
     for model in gcnn_models:
         for seed in seeds:
@@ -290,6 +297,10 @@ if __name__ == '__main__':
                 proctime = time.process_time()
 
                 m.optimize()
+                if args.output:
+                    for v in m.getVars():
+                        if m.getVal(v) != 0:
+                            print(v)
 
                 walltime = time.perf_counter() - walltime
                 proctime = time.process_time() - proctime
